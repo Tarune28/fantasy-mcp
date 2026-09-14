@@ -1,0 +1,20 @@
+[project]
+name = "espn-fantasy-mcp"
+version = "0.1.0"
+description = "MCP server exposing ESPN Fantasy Football data to Claude Desktop via stdio."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "espn-api>=0.44.0",
+    "mcp>=1.2.0",
+]
+
+[project.scripts]
+espn-fantasy-mcp = "server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["server"]

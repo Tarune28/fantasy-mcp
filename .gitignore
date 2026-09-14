@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets / local config — never commit ESPN cookies
+.env
+*.env
+claude_desktop_config.json
+secrets.*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
