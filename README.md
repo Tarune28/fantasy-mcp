@@ -41,6 +41,27 @@ valid teams so you can try again.
 
 ---
 
+## Project layout
+
+```
+server.py                      # entry point Claude Desktop runs (delegates to the package)
+espn_fantasy_mcp/
+  config.py                    # env vars, constants, prompting guidance
+  app.py                       # the MCP server instance + main()
+  client.py                    # ESPN League caching (get_league / reset_league)
+  formatting.py                # version-tolerant helpers (projections, fuzzy match, weeks…)
+  tools/
+    league.py                  # league-wide tools (overview, standings, matchups, settings…)
+    teams.py                   # roster, head-to-head, schedule, comparison, analysis
+    players.py                 # free agents, player stats, player NFL schedule
+    advice.py                  # trade candidates + start/sit
+```
+
+Importing `espn_fantasy_mcp.tools` runs the `@mcp.tool()` decorators, so `main()`
+registers every tool by importing that package before starting the stdio server.
+
+---
+
 ## 1. Install dependencies
 
 **Requires Python 3.10+** (the `mcp` SDK does not support 3.8/3.9). Check with
