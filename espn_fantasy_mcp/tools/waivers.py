@@ -1,11 +1,10 @@
 """Waiver and transaction tools: waiver order, FAAB budgets, transaction log.
 
-A note on *pending* claims: ESPN does not expose unprocessed/queued waiver
-claims through the API that third-party tools use — only ESPN's own logged-in
-web and app UI shows the claims you've submitted. So these tools deliberately
-cover what the API *can* provide — waiver priority, FAAB budgets, the processing
-schedule, and completed transactions — and are explicit about the pending gap
-rather than guessing.
+These tools cover waiver priority, FAAB budgets, the processing schedule, and
+completed transactions. A user's *own* pending (unprocessed) claims are handled
+separately in ``pending.py`` (get_pending_claims / cancel_pending_claim) via the
+mTransactions2 view — that view does expose them, contrary to a common belief
+that ESPN hides pending claims from the API.
 """
 
 from __future__ import annotations
@@ -79,9 +78,8 @@ def get_waiver_order() -> str:
     team's remaining and spent budget instead. It also reports the waiver
     processing schedule when ESPN exposes it.
 
-    Note: ESPN's API does not expose *pending* (unprocessed) claims to
-    third-party tools, so this cannot show which players you've claimed — only
-    priority/budgets and, via get_recent_transactions, claims once they process.
+    Note: to see the players you've actually claimed (your pending claims), use
+    get_pending_claims. This tool only reports priority/budgets and the schedule.
     """
     try:
         league = get_league()
@@ -131,9 +129,8 @@ def get_waiver_order() -> str:
 
     lines += [
         "",
-        "_Pending claims you've submitted are not available via ESPN's API — "
-        "check them in the ESPN app/site under your team's pending transactions. "
-        "Once a claim processes it will appear in get_recent_transactions._",
+        "_To see the claims you've submitted, use get_pending_claims. Once a "
+        "claim processes it also appears in get_recent_transactions._",
     ]
     fresh = freshness_line()
     if fresh:

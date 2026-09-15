@@ -48,6 +48,13 @@ These modify your **real** ESPN team. They require the private-league cookies
 | `add_drop_player` | Add a free agent and drop a player to make room (immediate) |
 | `submit_waiver_claim` | Queue a waiver claim (+ FAAB bid) for the next waiver run |
 | `set_lineup` | Move a player into a starting slot or the bench (start/sit) |
+| `cancel_pending_claim` | Withdraw one of your pending waiver / FA claims |
+
+There's also a read tool, `get_pending_claims`, that lists your own submitted-but-
+unprocessed claims (add/drop, FAAB bid, and a claim id). Despite a widespread
+belief that ESPN hides pending claims from the API, the `mTransactions2` view
+returns them for the authenticated owner — `cancel_pending_claim` uses that id to
+withdraw one.
 
 Every write tool is **two-step**: called without `confirm=true` it only *previews*
 the exact move and changes nothing. It submits to ESPN only when called again with

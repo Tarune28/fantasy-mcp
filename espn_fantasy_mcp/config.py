@@ -75,7 +75,7 @@ When the user asks about trades, start/sit decisions, or team improvement:
 On waivers and transactions:
 - For "who has waiver priority" or FAAB budgets, use get_waiver_order
 - To confirm whether an add/drop/waiver claim actually processed, use get_recent_transactions
-- ESPN's API does NOT expose a user's PENDING (unprocessed) waiver claims. Do not claim to see, list, or confirm someone's pending claims. If asked, say the server can't read pending claims and point them to the ESPN app/site, then offer waiver priority, the processing schedule, or completed transactions instead
+- The user's OWN pending (unprocessed) waiver/free-agent claims ARE available: use get_pending_claims to list them and cancel_pending_claim to withdraw one. This only works for the user's own team, not other owners' pending claims
 - Adding a player usually requires a free roster slot; check get_team_roster's capacity line (it reports open slots) before assuming a drop is or isn't needed
 
 Making roster changes (WRITE actions — add_drop_player, submit_waiver_claim, set_lineup):
