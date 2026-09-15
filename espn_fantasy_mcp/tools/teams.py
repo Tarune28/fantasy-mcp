@@ -13,11 +13,13 @@ from ..formatting import (
     is_starter,
     latest_projection_week,
     league_position_averages,
+    my_team,
     owner_name,
     player_avg,
     player_position,
     player_projected,
     player_slot,
+    resolve_team,
     roster_capacity,
     team_choices,
     upcoming_week,
@@ -41,11 +43,38 @@ def _capacity_line(league: Any, team: Any) -> str:
 
 
 @mcp.tool()
-def get_team_roster(team_name: str, week: Optional[int] = None) -> str:
-    """Get the full roster for any team in the league.
+def get_my_team() -> str:
+    """Report which team the server treats as the user's own.
+
+    Useful to confirm identity is configured so other tools can default to it.
+    """
+    try:
+        league = get_league()
+    except RuntimeError as exc:
+        return f"Error: {exc}"
+
+    team = my_team(league)
+    if team is None:
+        return (
+            "No 'my team' is configured yet, so tools that need a team will ask "
+            "for one. Set ESPN_TEAM_ID or ESPN_TEAM_NAME in the server config, "
+            "or set ESPN_SWID for a private league (I can auto-detect from it)."
+            f"\n\n{team_choices(league)}"
+        )
+    return (
+        f"Your team is **{team.team_name}** (owner: {owner_name(team)}, "
+        f"record {getattr(team, 'wins', 0)}-{getattr(team, 'losses', 0)}). "
+        "Tools like get_team_roster, get_start_sit, and get_team_analysis will "
+        "default to this team when you don't name one."
+    )
+
+
+@mcp.tool()
+def get_team_roster(team_name: Optional[str] = None, week: Optional[int] = None) -> str:
+    """Get the full roster for a team (defaults to your own team).
 
     Args:
-        team_name: Team name or owner name (fuzzy, case-insensitive substring).
+        team_name: Team name or owner name (fuzzy). Omit to use your own team.
         week: Week to project for. Defaults to the upcoming (actionable) week —
             if the current week's games are already final, this is next week.
 
@@ -57,9 +86,9 @@ def get_team_roster(team_name: str, week: Optional[int] = None) -> str:
     except RuntimeError as exc:
         return f"Error: {exc}"
 
-    team = find_team(league, team_name)
-    if team is None:
-        return f"No team matched '{team_name}'.\n\n{team_choices(league)}"
+    team, err = resolve_team(league, team_name)
+    if err:
+        return err
 
     wk = week or upcoming_week(league)
     posted = wk <= latest_projection_week(league)
@@ -162,11 +191,11 @@ def get_head_to_head(team_name_1: str, team_name_2: str) -> str:
 
 
 @mcp.tool()
-def get_team_schedule(team_name: str) -> str:
-    """Show a team's remaining schedule with opponent strength.
+def get_team_schedule(team_name: Optional[str] = None) -> str:
+    """Show a team's remaining schedule with opponent strength (defaults to yours).
 
     Args:
-        team_name: Team name or owner name (fuzzy).
+        team_name: Team name or owner name (fuzzy). Omit to use your own team.
 
     Lists each remaining week's opponent along with that opponent's record and
     points for, so you can gauge schedule difficulty.
@@ -176,9 +205,9 @@ def get_team_schedule(team_name: str) -> str:
     except RuntimeError as exc:
         return f"Error: {exc}"
 
-    team = find_team(league, team_name)
-    if team is None:
-        return f"No team matched '{team_name}'.\n\n{team_choices(league)}"
+    team, err = resolve_team(league, team_name)
+    if err:
+        return err
 
     schedule = getattr(team, "schedule", None) or []
     wk = current_week(league)
@@ -201,12 +230,15 @@ def get_team_schedule(team_name: str) -> str:
 
 
 @mcp.tool()
-def compare_teams(team_name_1: str, team_name_2: str) -> str:
+def compare_teams(
+    team_name_1: Optional[str] = None, team_name_2: Optional[str] = None
+) -> str:
     """Compare two teams' starting lineups side by side, position by position.
 
     Args:
-        team_name_1: First team (name or owner, fuzzy).
-        team_name_2: Second team (name or owner, fuzzy).
+        team_name_1: First team (name or owner, fuzzy). Omit to use your own team,
+            so "compare my team to X" only needs team_name_2.
+        team_name_2: Second team (name or owner, fuzzy). Required.
 
     Groups starters by position and shows projected points for each slot, plus a
     projected-points total for each team.
@@ -216,10 +248,12 @@ def compare_teams(team_name_1: str, team_name_2: str) -> str:
     except RuntimeError as exc:
         return f"Error: {exc}"
 
-    t1 = find_team(league, team_name_1)
+    if not (team_name_2 and team_name_2.strip()):
+        return "Please name the other team to compare against (team_name_2)."
+    t1, err = resolve_team(league, team_name_1)
+    if err:
+        return err
     t2 = find_team(league, team_name_2)
-    if t1 is None:
-        return f"No team matched '{team_name_1}'.\n\n{team_choices(league)}"
     if t2 is None:
         return f"No team matched '{team_name_2}'.\n\n{team_choices(league)}"
 
@@ -269,11 +303,11 @@ def compare_teams(team_name_1: str, team_name_2: str) -> str:
 
 
 @mcp.tool()
-def get_team_analysis(team_name: str) -> str:
-    """Aggregated snapshot of a team for trade / improvement advice.
+def get_team_analysis(team_name: Optional[str] = None) -> str:
+    """Aggregated snapshot of a team for trade / improvement advice (defaults to yours).
 
     Args:
-        team_name: Team name or owner name (fuzzy).
+        team_name: Team name or owner name (fuzzy). Omit to use your own team.
 
     Returns:
     - Full roster with average points and a last-3-weeks trend (up/down/flat)
@@ -286,9 +320,9 @@ def get_team_analysis(team_name: str) -> str:
     except RuntimeError as exc:
         return f"Error: {exc}"
 
-    team = find_team(league, team_name)
-    if team is None:
-        return f"No team matched '{team_name}'.\n\n{team_choices(league)}"
+    team, err = resolve_team(league, team_name)
+    if err:
+        return err
 
     week = upcoming_week(league)
     lg_avg = league_position_averages(league, week)

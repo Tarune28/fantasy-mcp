@@ -8,7 +8,6 @@ from ..app import mcp
 from ..client import freshness_line, get_league
 from ..formatting import (
     eligible_slots,
-    find_team,
     injury_flag,
     is_starter,
     latest_projection_week,
@@ -17,18 +16,18 @@ from ..formatting import (
     player_position,
     player_projected,
     player_slot,
+    resolve_team,
     scoring_kind,
-    team_choices,
     upcoming_week,
 )
 
 
 @mcp.tool()
-def get_trade_candidates(team_name: str) -> str:
-    """Identify potential trade targets for a team.
+def get_trade_candidates(team_name: Optional[str] = None) -> str:
+    """Identify potential trade targets for a team (defaults to your own team).
 
     Args:
-        team_name: Team name or owner name (fuzzy).
+        team_name: Team name or owner name (fuzzy). Omit to use your own team.
 
     Finds the team's weakest starting position group, then scans every other
     team for players at that position who sit on the bench or represent surplus
@@ -40,9 +39,9 @@ def get_trade_candidates(team_name: str) -> str:
     except RuntimeError as exc:
         return f"Error: {exc}"
 
-    team = find_team(league, team_name)
-    if team is None:
-        return f"No team matched '{team_name}'.\n\n{team_choices(league)}"
+    team, err = resolve_team(league, team_name)
+    if err:
+        return err
 
     week = upcoming_week(league)
     lg_avg = league_position_averages(league, week)
@@ -115,11 +114,11 @@ def get_trade_candidates(team_name: str) -> str:
 
 
 @mcp.tool()
-def get_start_sit(team_name: str, week: Optional[int] = None) -> str:
-    """Recommend start/sit moves for a team's lineup for a given week.
+def get_start_sit(team_name: Optional[str] = None, week: Optional[int] = None) -> str:
+    """Recommend start/sit moves for a team's lineup (defaults to your own team).
 
     Args:
-        team_name: Team name or owner name (fuzzy, case-insensitive substring).
+        team_name: Team name or owner name (fuzzy). Omit to use your own team.
         week: Week number. Defaults to the upcoming (actionable) week — if the
             current week's games are already final, this is next week.
 
@@ -133,9 +132,9 @@ def get_start_sit(team_name: str, week: Optional[int] = None) -> str:
     except RuntimeError as exc:
         return f"Error: {exc}"
 
-    team = find_team(league, team_name)
-    if team is None:
-        return f"No team matched '{team_name}'.\n\n{team_choices(league)}"
+    team, err = resolve_team(league, team_name)
+    if err:
+        return err
 
     wk = week or upcoming_week(league)
     posted = wk <= latest_projection_week(league)

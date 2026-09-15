@@ -17,7 +17,8 @@ Built on [`espn-api`](https://github.com/cwendt94/espn-api) and the
 | `get_league_overview` | League name, settings, current week, team count |
 | `get_standings` | Teams ranked by record and points, with streaks |
 | `get_teams` | Every team + owner (use to find names for other tools) |
-| `get_team_roster` | Roster for any team (starters/bench, projections, injuries) |
+| `get_my_team` | Report which team is configured as yours |
+| `get_team_roster` | Roster for a team (defaults to yours; starters/bench, projections, injuries) |
 | `get_matchups` | All matchups for a week (scores + projections) |
 | `get_scoreboard` | Current week's live scores |
 | `get_head_to_head` | Season history between two teams |
@@ -129,6 +130,12 @@ installed — plain `python`/`python3` may be too old):
 Notes:
 - For a **public** league, omit `ESPN_S2` and `ESPN_SWID`.
 - `ESPN_YEAR` is optional; it defaults to the current calendar year.
+- **Identifying your team** (so tools default to it and you don't repeat who you
+  are): for a **private** league nothing extra is needed — your `ESPN_SWID`
+  cookie is your owner id, so the server auto-detects your team. To set it
+  explicitly (or for a public league), add `ESPN_TEAM_ID` (preferred, stable) or
+  `ESPN_TEAM_NAME`. Resolution order is `ESPN_TEAM_ID` → `ESPN_TEAM_NAME` →
+  auto-detect from `ESPN_SWID`. Confirm with the `get_my_team` tool.
 - `ESPN_CACHE_TTL` is optional (default `180` seconds). League data is cached
   between calls for speed, but any tool call made after the cache passes this
   age transparently re-fetches from ESPN, so rosters and waiver results stay

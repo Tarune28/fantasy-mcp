@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
+from . import config
 from .config import BENCH_SLOTS
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -28,6 +29,8 @@ __all__ = [
     "player_position",
     "injury_flag",
     "find_team",
+    "my_team",
+    "resolve_team",
     "team_choices",
     "scoring_kind",
     "roster_slot_counts",
@@ -230,6 +233,70 @@ def find_team(league: "League", query: str) -> Any:
         if q in _norm(owner_name(team)):
             return team
     return None
+
+
+def _norm_swid(value: Any) -> str:
+    """Normalize a SWID/owner id for comparison (strip braces, spaces, case)."""
+    return str(value or "").strip().strip("{}").strip().upper()
+
+
+def my_team(league: "League") -> Any:
+    """Resolve the configured 'my team', or None if it can't be determined.
+
+    Resolution order:
+    1. ESPN_TEAM_ID  — exact team id match
+    2. ESPN_TEAM_NAME — fuzzy team/owner name match
+    3. ESPN_SWID     — auto-detect: a private-league SWID cookie is the owner's
+       member id, so match the team whose owners include it.
+    """
+    if config.TEAM_ID:
+        try:
+            wanted = int(config.TEAM_ID)
+        except (TypeError, ValueError):
+            wanted = None
+        if wanted is not None:
+            for team in league.teams:
+                if getattr(team, "team_id", None) == wanted:
+                    return team
+
+    if config.TEAM_NAME:
+        team = find_team(league, config.TEAM_NAME)
+        if team is not None:
+            return team
+
+    if config.SWID:
+        target = _norm_swid(config.SWID)
+        if target:
+            for team in league.teams:
+                for owner in getattr(team, "owners", None) or []:
+                    owner_id = owner.get("id") if isinstance(owner, dict) else owner
+                    if _norm_swid(owner_id) == target:
+                        return team
+
+    return None
+
+
+def resolve_team(league: "League", query: Optional[str]) -> tuple[Any, Optional[str]]:
+    """Resolve a team argument, defaulting to 'my team' when none is given.
+
+    Returns (team, None) on success, or (None, error_message) with guidance the
+    caller can return directly.
+    """
+    if query and query.strip():
+        team = find_team(league, query)
+        if team is not None:
+            return team, None
+        return None, f"No team matched '{query}'.\n\n{team_choices(league)}"
+
+    team = my_team(league)
+    if team is not None:
+        return team, None
+    return None, (
+        "I don't know which team is yours yet. Tell me your team or owner name, "
+        "or set ESPN_TEAM_ID (or ESPN_TEAM_NAME) in the server config — for a "
+        "private league with ESPN_SWID set I can usually detect it automatically."
+        f"\n\n{team_choices(league)}"
+    )
 
 
 def team_choices(league: "League") -> str:

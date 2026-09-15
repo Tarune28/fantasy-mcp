@@ -23,6 +23,13 @@ YEAR = int(os.environ.get("ESPN_YEAR") or datetime.datetime.now().year)
 ESPN_S2 = os.environ.get("ESPN_S2") or None
 SWID = os.environ.get("ESPN_SWID") or None
 
+# Identifies "my" team so tools can default to it instead of asking every time.
+# Resolution order (see formatting.my_team): ESPN_TEAM_ID, then ESPN_TEAM_NAME,
+# then auto-detect from SWID (a private-league SWID cookie is the owner's id, so
+# no extra config is needed for private leagues).
+TEAM_ID = os.environ.get("ESPN_TEAM_ID") or None
+TEAM_NAME = os.environ.get("ESPN_TEAM_NAME") or None
+
 # How long (seconds) a fetched League object is trusted before the next tool
 # call transparently re-fetches it from ESPN. This is what keeps rosters and
 # waiver results from going stale between calls. Set to 0 to cache forever
@@ -47,6 +54,16 @@ POSITION_ALIASES = {
 # fantasy advice correctly.
 GUIDANCE = """\
 This MCP server provides full access to an ESPN Fantasy Football league.
+
+Identifying the user's team:
+- Team-specific tools (get_team_roster, get_start_sit, get_team_analysis,
+  get_team_schedule, get_trade_candidates, and team_name_1 of compare_teams)
+  default to the USER'S OWN team when you omit the team argument. For "my roster",
+  "who should I start", etc., call them with NO team name — do not ask the user
+  who they are. Only pass a team name when they ask about a specific other team.
+- Call get_my_team if you need to confirm which team that is. If it reports none
+  is configured, then ask the user for their team name.
+
 When the user asks about trades, start/sit decisions, or team improvement:
 - Always check league scoring settings first (PPR vs standard changes player values dramatically)
 - Look at bye weeks when evaluating roster construction
