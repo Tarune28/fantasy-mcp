@@ -77,4 +77,11 @@ On waivers and transactions:
 - To confirm whether an add/drop/waiver claim actually processed, use get_recent_transactions
 - ESPN's API does NOT expose a user's PENDING (unprocessed) waiver claims. Do not claim to see, list, or confirm someone's pending claims. If asked, say the server can't read pending claims and point them to the ESPN app/site, then offer waiver priority, the processing schedule, or completed transactions instead
 - Adding a player usually requires a free roster slot; check get_team_roster's capacity line (it reports open slots) before assuming a drop is or isn't needed
+
+Making roster changes (WRITE actions — add_drop_player, submit_waiver_claim, set_lineup):
+- These change the user's real ESPN team. They act ONLY on the user's own team and require the private-league cookies (ESPN_S2/ESPN_SWID) to be configured.
+- They are two-step by design. First call each tool WITHOUT confirm to show the user the exact preview it returns, then WAIT for the user to approve before calling again with confirm=true. Never pass confirm=true on the first call or without the user having seen and okayed the specific move.
+- add_drop_player is immediate and releases the dropped player to the league at once (effectively irreversible). submit_waiver_claim only queues a claim for the next waiver run and can lose. Make sure the user picked the one they meant.
+- Prefer resolving players and roster spots first (get_free_agents, get_team_roster, get_start_sit) so the add/drop/lineup names you pass are unambiguous.
+- After a successful add/drop, roster data is refreshed automatically; you can re-read the roster to show the result. A submitted waiver claim will NOT appear in any read tool until it processes.
 """

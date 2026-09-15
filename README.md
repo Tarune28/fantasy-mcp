@@ -38,6 +38,29 @@ Built on [`espn-api`](https://github.com/cwendt94/espn-api) and the
 | `get_start_sit` | Projection-based start/sit swaps + injury/bye flags |
 | `refresh_league` | Force a re-fetch of all league data |
 
+### Write tools (change your roster)
+
+These modify your **real** ESPN team. They require the private-league cookies
+(`ESPN_S2` / `ESPN_SWID`) and act only on the team detected as yours.
+
+| Tool | What it does |
+| --- | --- |
+| `add_drop_player` | Add a free agent and drop a player to make room (immediate) |
+| `submit_waiver_claim` | Queue a waiver claim (+ FAAB bid) for the next waiver run |
+| `set_lineup` | Move a player into a starting slot or the bench (start/sit) |
+
+Every write tool is **two-step**: called without `confirm=true` it only *previews*
+the exact move and changes nothing. It submits to ESPN only when called again with
+`confirm=true`. Ask for the preview first, check it, then confirm.
+
+> **How writes work.** The read tools use the `espn-api` library, which is
+> GET-only. The write tools instead POST directly to ESPN's undocumented
+> `lm-api-writes` transactions endpoint, reusing your cookies. That endpoint is
+> reverse-engineered and unsupported by ESPN — it can change or break, and a
+> dropped player is released to the league immediately. ESPN also can't read back
+> *pending* waiver claims, so a submitted claim won't reappear in any read tool
+> until it processes; check/cancel it in the ESPN app.
+
 All team-name arguments accept **either the team name or the owner name**, matched
 case-insensitively as a substring. If nothing matches, the tool returns the list of
 valid teams so you can try again.
@@ -58,6 +81,7 @@ espn_fantasy_mcp/
     teams.py                   # roster, head-to-head, schedule, comparison, analysis
     players.py                 # free agents, player stats, player NFL schedule
     advice.py                  # trade candidates + start/sit
+    roster_moves.py            # WRITE tools: add/drop, waiver claim, set lineup
 ```
 
 Importing `espn_fantasy_mcp.tools` runs the `@mcp.tool()` decorators, so `main()`
