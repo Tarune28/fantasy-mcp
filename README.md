@@ -25,6 +25,8 @@ Built on [`espn-api`](https://github.com/cwendt94/espn-api) and the
 | `get_player_stats` | A player's season stats, weekly scores, status |
 | `get_power_rankings` | Power rankings for a week |
 | `get_trade_activity` | Recent completed trades |
+| `get_recent_transactions` | Recent adds, drops, waiver claims, and trades |
+| `get_waiver_order` | Waiver priority / FAAB budgets + processing schedule |
 | `get_playoff_picture` | Seeds, clinched / in-contention / eliminated |
 | `compare_teams` | Side-by-side starter comparison, position by position |
 | `get_league_settings` | Scoring format, roster slots, playoff/trade rules |
@@ -127,6 +129,11 @@ installed — plain `python`/`python3` may be too old):
 Notes:
 - For a **public** league, omit `ESPN_S2` and `ESPN_SWID`.
 - `ESPN_YEAR` is optional; it defaults to the current calendar year.
+- `ESPN_CACHE_TTL` is optional (default `180` seconds). League data is cached
+  between calls for speed, but any tool call made after the cache passes this
+  age transparently re-fetches from ESPN, so rosters and waiver results stay
+  current without a manual refresh. Set to `0` to cache for the whole process
+  (only `refresh_league` re-fetches); lower it for fresher live-scoring reads.
 - `command` needs an **absolute path** if `python3.11` isn't on Claude Desktop's PATH
   (find yours with `which python3.11`). A venv's Python works too
   (e.g. `"/absolute/path/to/.venv/bin/python"`).
@@ -158,8 +165,10 @@ advice.
 
 - **"Could not load league …"** — check `ESPN_LEAGUE_ID`, and for private leagues verify
   both cookies. `espn_s2` is long and may contain `%` characters; copy the whole value.
-- **Data looks stale** — call `refresh_league` (or just ask Claude to refresh the league);
-  the server caches the league object between calls for speed.
+- **Data looks stale** — cached data auto-refreshes once it passes `ESPN_CACHE_TTL`
+  (default 3 min), so most staleness clears on the next call. To force the latest
+  immediately (e.g. a waiver just ran), call `refresh_league` or ask Claude to refresh.
+  Roster tools also print a "Data as of HH:MM" line so you can see the age.
 - **A player isn't found** — try a fuller name; lookups are provided by ESPN's search.
 - **Tools don't appear in Claude Desktop** — confirm the JSON is valid, the path to
   `server.py` is absolute, and the configured `python` can import `mcp` and `espn_api`.

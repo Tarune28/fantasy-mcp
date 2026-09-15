@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ..app import mcp
-from ..client import get_league
+from ..client import freshness_line, get_league
 from ..formatting import (
     current_week,
     find_team,
@@ -18,9 +18,26 @@ from ..formatting import (
     player_position,
     player_projected,
     player_slot,
+    roster_capacity,
     team_choices,
     upcoming_week,
 )
+
+
+def _capacity_line(league: Any, team: Any) -> str:
+    """One-line roster-occupancy summary, e.g. '15/16 spots used — 1 open'."""
+    cap = roster_capacity(league, team)
+    used = cap["used"]
+    if cap["total"] is None:
+        base = f"Roster: {used} active players (capacity unknown)"
+    else:
+        openn = cap["open"] or 0
+        spot = "spot" if openn == 1 else "spots"
+        state = f"{openn} open {spot}" if openn else "full — a drop is needed to add anyone"
+        base = f"Roster: {used}/{cap['total']} spots used — {state} (excludes IR)"
+    if cap["ir_total"]:
+        base += f"; IR {cap['ir_used']}/{cap['ir_total']}"
+    return base
 
 
 @mcp.tool()
@@ -66,6 +83,7 @@ def get_team_roster(team_name: str, week: Optional[int] = None) -> str:
     )
     lines = [
         f"# {team.team_name} — roster (owner: {owner_name(team)})",
+        _capacity_line(league, team),
         proj_note,
         "",
         "## Starters",
@@ -73,6 +91,9 @@ def get_team_roster(team_name: str, week: Optional[int] = None) -> str:
     lines += [row(p) for p in starters] or ["  (none)"]
     lines += ["", "## Bench / IR"]
     lines += [row(p) for p in bench] or ["  (none)"]
+    fresh = freshness_line()
+    if fresh:
+        lines += ["", fresh]
     return "\n".join(lines)
 
 
@@ -298,6 +319,7 @@ def get_team_analysis(team_name: str) -> str:
     lines = [
         f"# Team analysis — {team.team_name} (owner: {owner_name(team)})",
         f"Week {week} | Record {getattr(team, 'wins', 0)}-{getattr(team, 'losses', 0)}",
+        _capacity_line(league, team),
         "",
         "## Roster (avg pts, trend)",
     ]
@@ -364,4 +386,7 @@ def get_team_analysis(team_name: str) -> str:
     else:
         lines.append("  No multi-starter bye conflicts detected (or NFL schedule unavailable).")
 
+    fresh = freshness_line()
+    if fresh:
+        lines += ["", fresh]
     return "\n".join(lines)

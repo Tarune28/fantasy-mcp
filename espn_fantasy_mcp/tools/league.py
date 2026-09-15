@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..app import mcp
-from ..client import get_league, reset_league
+from ..client import fetched_at, freshness_line, get_league, reset_league
 from ..config import YEAR
 from ..formatting import (
     current_week,
@@ -19,18 +19,22 @@ from ..formatting import (
 
 @mcp.tool()
 def refresh_league() -> str:
-    """Force a re-fetch of all league data from ESPN.
+    """Force an immediate re-fetch of all league data from ESPN.
 
-    Use this when scores, rosters, or transactions may have changed since the
-    server started. All other tools use cached data until this is called.
+    Other tools already auto-refresh once their cached copy passes the staleness
+    TTL (ESPN_CACHE_TTL, default 3 min), so you usually don't need this. Reach
+    for it when you want the very latest right now — e.g. a waiver just
+    processed, someone made a trade, or scores are moving during games.
     """
     reset_league()
     try:
         league = get_league()
     except RuntimeError as exc:
         return f"Error: {exc}"
+    stamp = fetched_at()
+    when = f" at {stamp.strftime('%H:%M')}" if stamp else ""
     return (
-        f"League data refreshed: {league.settings.name} "
+        f"League data refreshed{when}: {league.settings.name} "
         f"({YEAR}), currently week {current_week(league)}."
     )
 
@@ -191,6 +195,9 @@ def get_scoreboard() -> str:
         lines.append(
             f"{away_name[:26]:<27} {as_:>6.1f}  {leader}  {hs:<6.1f} {home_name}"
         )
+    fresh = freshness_line()
+    if fresh:
+        lines += ["", fresh]
     return "\n".join(lines)
 
 
@@ -228,37 +235,57 @@ def get_power_rankings(week: Optional[int] = None) -> str:
 
 @mcp.tool()
 def get_trade_activity() -> str:
-    """List recent completed trades in the league."""
+    """List recent completed trades in the league.
+
+    For a broader feed that also includes adds, drops, and waiver claims, use
+    get_recent_transactions.
+    """
     try:
         league = get_league()
     except RuntimeError as exc:
         return f"Error: {exc}"
 
     try:
-        activity = league.recent_activity(size=50)
+        activity = league.recent_activity(size=50, msg_type="TRADED")
     except Exception as exc:  # noqa: BLE001
         return f"Could not load recent activity: {exc}"
+
+    # espn_api emits each trade as TRADE_SENT (giver) and TRADE_RECEIVED
+    # (getter) rows; older versions used a single "TRADED" label. Handle both.
+    trade_labels = {"TRADE_SENT", "TRADE_RECEIVED", "TRADED"}
 
     lines = [f"# Recent trades — {league.settings.name}", ""]
     found = False
     for act in activity or []:
         actions = getattr(act, "actions", None) or []
-        trade_actions = [a for a in actions if len(a) > 1 and "TRADED" in str(a[1]).upper()]
+        trade_actions = [
+            a for a in actions if len(a) > 1 and str(a[1]).upper() in trade_labels
+        ]
         if not trade_actions:
             continue
         found = True
-        date = fmt_ts(getattr(act, "date", None))
-        lines.append(f"## {date}")
+        lines.append(f"## {fmt_ts(getattr(act, 'date', None))}")
         for a in trade_actions:
             team = a[0]
+            action = str(a[1]).upper()
             player = a[2] if len(a) > 2 else None
-            team_name = getattr(team, "team_name", "Unknown team")
-            player_name = getattr(player, "name", str(player)) if player else "?"
-            lines.append(f"  - {team_name} traded for {player_name}")
+            team_name = getattr(team, "team_name", None) or "Unknown team"
+            player_name = getattr(player, "name", None) or (
+                str(player) if player is not None else "?"
+            )
+            if action == "TRADE_RECEIVED":
+                lines.append(f"  - {team_name} received {player_name}")
+            elif action == "TRADE_SENT":
+                lines.append(f"  - {team_name} traded away {player_name}")
+            else:
+                lines.append(f"  - {team_name} traded for {player_name}")
         lines.append("")
 
     if not found:
         return "No recent trades found in the league's activity feed."
+    fresh = freshness_line()
+    if fresh:
+        lines.append(fresh)
     return "\n".join(lines).rstrip()
 
 

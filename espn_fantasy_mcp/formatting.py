@@ -31,6 +31,7 @@ __all__ = [
     "team_choices",
     "scoring_kind",
     "roster_slot_counts",
+    "roster_capacity",
     "fmt_ts",
     "league_position_averages",
     "eligible_slots",
@@ -273,6 +274,63 @@ def roster_slot_counts(league: "League") -> dict[str, int]:
         return counts
     except Exception:  # noqa: BLE001
         return {}
+
+
+_IR_SLOTS = {"IR", "Injured Reserve"}
+
+
+def _settings_slot_counts(league: "League") -> dict[str, int]:
+    """Authoritative slot->count from league settings, or {} if unavailable.
+
+    Unlike ``roster_slot_counts``, this never falls back to inferring counts
+    from a filled roster (which would report every slot as occupied and make it
+    look like there are zero open spots). We only report roster capacity when we
+    have real settings data to base it on.
+    """
+    for attr in ("position_slot_counts", "roster_positions"):
+        val = getattr(league.settings, attr, None)
+        if isinstance(val, dict) and val:
+            return {k: v for k, v in val.items() if v}
+    return {}
+
+
+def roster_capacity(league: "League", team: Any) -> dict[str, Optional[int]]:
+    """Compute roster occupancy so tools never have to guess if a team is full.
+
+    Returns a dict with:
+        used      - active (non-IR) players currently rostered
+        total     - active roster capacity (starters + bench), or None if unknown
+        open      - open active slots (total - used), or None if unknown
+        ir_used   - players currently in IR slots
+        ir_total  - IR slot capacity, or None if unknown
+
+    ``total``/``open`` are None when league settings don't expose slot counts,
+    so callers can say "capacity unknown" instead of reporting a wrong number.
+    """
+    slot_counts = _settings_slot_counts(league)
+    total: Optional[int] = None
+    ir_total: Optional[int] = None
+    if slot_counts:
+        active_total = 0
+        for slot, count in slot_counts.items():
+            if slot in _IR_SLOTS:
+                ir_total = (ir_total or 0) + count
+            else:
+                active_total += count
+        total = active_total
+
+    roster = getattr(team, "roster", None) or []
+    ir_used = sum(1 for p in roster if player_slot(p) in _IR_SLOTS)
+    used = len(roster) - ir_used
+    open_slots = max(total - used, 0) if total is not None else None
+
+    return {
+        "used": used,
+        "total": total,
+        "open": open_slots,
+        "ir_used": ir_used,
+        "ir_total": ir_total,
+    }
 
 
 def fmt_ts(ts: Any) -> str:

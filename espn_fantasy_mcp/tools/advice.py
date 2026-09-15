@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ..app import mcp
-from ..client import get_league
+from ..client import freshness_line, get_league
 from ..formatting import (
     eligible_slots,
     find_team,
@@ -223,4 +223,7 @@ def get_start_sit(team_name: str, week: Optional[int] = None) -> str:
         f"Scoring format: {scoring_kind(league)} — weigh this in close calls "
         "(receptions matter more in PPR).",
     ]
+    fresh = freshness_line()
+    if fresh:
+        lines += ["", fresh]
     return "\n".join(lines)

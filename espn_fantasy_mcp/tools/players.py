@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..app import mcp
-from ..client import get_league
+from ..client import freshness_line, get_league
 from ..config import POSITION_ALIASES
 from ..formatting import (
     current_week,
@@ -59,6 +59,9 @@ def get_free_agents(position: Optional[str] = None, limit: int = 10) -> str:
             f"{getattr(p, 'name', '?')[:24]:<25}{player_position(p):<5}"
             f"{player_projected(p, week):>7.1f}{player_avg(p):>7.1f}  {inj or 'OK'}"
         )
+    fresh = freshness_line()
+    if fresh:
+        lines += ["", fresh]
     return "\n".join(lines)
 
 
