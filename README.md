@@ -24,6 +24,7 @@ Built on [`espn-api`](https://github.com/cwendt94/espn-api) and the
 | `get_head_to_head` | Season history between two teams |
 | `get_free_agents` | Top available FAs by position |
 | `get_player_stats` | A player's season stats, weekly scores, status |
+| `analyze_player` | **Multi-factor** player review: form, floor/ceiling, usage, Vegas implied total, opponent defense, depth-chart role, injury, market — not just the projection |
 | `get_power_rankings` | Power rankings for a week |
 | `get_trade_activity` | Recent completed trades |
 | `get_recent_transactions` | Recent adds, drops, waiver claims, and trades |
@@ -172,6 +173,15 @@ Notes:
   age transparently re-fetches from ESPN, so rosters and waiver results stay
   current without a manual refresh. Set to `0` to cache for the whole process
   (only `refresh_league` re-fetches); lower it for fresher live-scoring reads.
+- **Better analysis (external enrichment).** By default the analytical tools go
+  beyond ESPN's projection by pulling free, no-auth context — Vegas implied team
+  totals (game environment), opponent defense strength, and Sleeper depth-chart
+  role / injury / add-drop trends. These need only outbound HTTPS (no keys) and
+  degrade gracefully if a source is slow or down. Turn the whole layer off with
+  `"ESPN_MCP_EXTERNAL": "0"` in the `env` block; tune with `ESPN_MCP_EXTERNAL_TIMEOUT`
+  (default 8s) and the `ESPN_MCP_TTL_*` cache knobs. `analyze_player` is the
+  flagship tool built on this; `get_start_sit` and `get_free_agents` annotate rows
+  with the same context.
 - `command` needs an **absolute path** if `python3.11` isn't on Claude Desktop's PATH
   (find yours with `which python3.11`). A venv's Python works too
   (e.g. `"/absolute/path/to/.venv/bin/python"`).

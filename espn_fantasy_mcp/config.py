@@ -39,6 +39,27 @@ try:
 except ValueError:
     CACHE_TTL_SECONDS = 180
 
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+
+
+# --- Tier-1 external enrichment (see sources.py) --------------------------
+# ESPN's own projection is one weak signal. When enabled, tools also pull free,
+# no-auth context — Vegas implied totals, opponent defense strength, and Sleeper
+# role/injury/market data — so player review isn't a single number. Set
+# ESPN_MCP_EXTERNAL=0 to disable all outbound calls (ESPN-fantasy data only).
+EXTERNAL_ENABLED = (os.environ.get("ESPN_MCP_EXTERNAL") or "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
+EXTERNAL_TIMEOUT = _int_env("ESPN_MCP_EXTERNAL_TIMEOUT", 8)
+EXTERNAL_TTL_GAME = _int_env("ESPN_MCP_TTL_GAME", 1800)      # odds/defense: 30 min
+EXTERNAL_TTL_SLEEPER = _int_env("ESPN_MCP_TTL_SLEEPER", 21600)  # player map: 6 h
+EXTERNAL_TTL_TREND = _int_env("ESPN_MCP_TTL_TREND", 3600)    # trending: 1 h
+
 # Lineup slots that are not starting spots.
 BENCH_SLOTS = {"BE", "Bench", "IR"}
 
@@ -64,6 +85,24 @@ Identifying the user's team:
 - Call get_my_team if you need to confirm which team that is. If it reports none
   is configured, then ask the user for their team name.
 
+Evaluating players — DO NOT judge a player by a single projection number:
+- ESPN's projection is ONE weak input. get_start_sit, get_team_analysis, etc.
+  rank by it for a first pass, but a projection alone is not an analysis.
+- For any close or consequential call (a start/sit toss-up, a trade piece, a
+  waiver target, "is this player good?"), call analyze_player. It returns a
+  multi-factor briefing — recent form, floor/ceiling volatility, opportunity
+  (targets/carries), matchup (Vegas implied team total + opponent defense
+  rank), depth-chart role, injury/practice status, and market/trending — and
+  it flags when the projection diverges from reality. Synthesize those factors;
+  explain the WHY, don't just relay the projected points.
+- Think in the terms a sharp manager would: a WR's ceiling depends on his QB and
+  the team's implied total (a low total or a backup QB caps a good receiver); a
+  RB's value is about volume/role, not name; a boom/bust player is a different
+  bet in a must-win week than a high-floor one; recent usage beats old points.
+- A high implied team total signals a good scoring environment; a low one (or a
+  tough opponent-defense rank) is a fade even for a talented player. Weigh
+  floor vs ceiling against whether the user needs safety or upside this week.
+
 When the user asks about trades, start/sit decisions, or team improvement:
 - Always check league scoring settings first (PPR vs standard changes player values dramatically)
 - Look at bye weeks when evaluating roster construction
@@ -71,6 +110,7 @@ When the user asks about trades, start/sit decisions, or team improvement:
 - Compare position group strength to the league average, not just raw points
 - A "weakness" means a position where the team's starter underperforms the league average at that position
 - When suggesting trades, identify what the OTHER team needs too, since a good trade proposal addresses both sides
+- Run analyze_player on the key players on BOTH sides before endorsing a trade
 
 On waivers and transactions:
 - For "who has waiver priority" or FAAB budgets, use get_waiver_order

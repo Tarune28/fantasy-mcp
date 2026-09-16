@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from ..app import mcp
 from ..client import freshness_line, get_league
+from .analysis import context_tag
 from ..formatting import (
     eligible_slots,
     injury_flag,
@@ -124,8 +125,10 @@ def get_start_sit(team_name: Optional[str] = None, week: Optional[int] = None) -
 
     Flags starters who are injured or on bye, then compares bench players to the
     current starters at slots they are eligible to fill and suggests any swap
-    where a bench player out-projects a starter. Purely projection-driven — treat
-    it as a starting point, not gospel (matchups and game scripts still matter).
+    where a bench player out-projects a starter. The swap search is projection-
+    driven, but each player is annotated with matchup context ({@OPP, opponent
+    defense rank, implied team total}, form, injury) so you can override the
+    projection. For a genuinely close call, run analyze_player on both players.
     """
     try:
         league = get_league()
@@ -168,9 +171,10 @@ def get_start_sit(team_name: Optional[str] = None, week: Optional[int] = None) -
         elif proj <= 0:
             flag = "  <-- 0 projected (bye week or inactive?)"
             warnings.append(getattr(p, "name", "?"))
+        ctx = context_tag(p, wk) if not flag else ""
         lines.append(
             f"  {player_slot(p):<9}{player_position(p):<5}"
-            f"{getattr(p, 'name', '?')[:22]:<23}proj {proj:>6.1f}{flag}"
+            f"{getattr(p, 'name', '?')[:22]:<23}proj {proj:>6.1f}{flag}{ctx}"
         )
 
     # Greedy swap search: highest projection gain first, each starter slot and
@@ -200,12 +204,17 @@ def get_start_sit(team_name: Optional[str] = None, week: Optional[int] = None) -
             lines.append(
                 f"  START {getattr(b, 'name', '?')} "
                 f"({player_position(b)}, proj {player_projected(b, wk):.1f})"
+                f"{context_tag(b, wk)}"
             )
             lines.append(
                 f"    over {getattr(s, 'name', '?')} "
                 f"({player_slot(s)}, proj {player_projected(s, wk):.1f})  "
-                f"[+{diff:.1f} pts]"
+                f"[+{diff:.1f} pts]{context_tag(s, wk)}"
             )
+        lines.append(
+            "  (Projection-based. For a close call run analyze_player on both — "
+            "matchup, usage, and volatility can flip it.)"
+        )
     else:
         lines.append("  Lineup already looks optimal by projection. No swaps suggested.")
 

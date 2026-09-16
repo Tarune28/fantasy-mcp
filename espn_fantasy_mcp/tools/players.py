@@ -7,6 +7,7 @@ from typing import Optional
 from ..app import mcp
 from ..client import freshness_line, get_league
 from ..config import POSITION_ALIASES
+from .analysis import context_tag
 from ..formatting import (
     current_week,
     injury_flag,
@@ -51,14 +52,20 @@ def get_free_agents(position: Optional[str] = None, limit: int = 10) -> str:
     )[:limit]
 
     title = f"# Top {len(agents)} free agents" + (f" — {pos}" if pos else "")
-    header = f"{'Player':<25}{'Pos':<5}{'Proj':>7}{'Avg':>7}  Status"
+    header = f"{'Player':<25}{'Pos':<5}{'Proj':>7}{'Avg':>7}  Status / context"
     lines = [title, "", header, "-" * len(header)]
     for p in agents:
         inj = injury_flag(p)
         lines.append(
             f"{getattr(p, 'name', '?')[:24]:<25}{player_position(p):<5}"
             f"{player_projected(p, week):>7.1f}{player_avg(p):>7.1f}  {inj or 'OK'}"
+            f"{context_tag(p, week)}"
         )
+    lines += [
+        "",
+        "Context tags: {@OPP (D rank/32), ITT=implied team total, form, injury}. "
+        "Run analyze_player on a target before spending FAAB or a claim.",
+    ]
     fresh = freshness_line()
     if fresh:
         lines += ["", fresh]
