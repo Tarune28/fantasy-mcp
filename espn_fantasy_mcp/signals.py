@@ -54,9 +54,25 @@ def weekly_scores(player: Any) -> list[tuple[int, float, Optional[float]]]:
         pts = entry.get("points")
         if not isinstance(pts, (int, float)):
             continue
+        if pts == 0 and not entry.get("breakdown"):
+            continue  # 0.0 with no stat line = did not play (injury/inactive)
         proj = entry.get("projected_points")
         rows.append((wk, float(pts), float(proj) if isinstance(proj, (int, float)) else None))
     return rows
+
+
+def missed_games(player: Any) -> list[int]:
+    """Weeks the player had a game on the schedule but recorded no stat line."""
+    stats = getattr(player, "stats", None)
+    if not isinstance(stats, dict):
+        return []
+    out = []
+    for wk in sorted(k for k in stats if isinstance(k, int) and k > 0):
+        entry = stats[wk]
+        if isinstance(entry, dict) and entry.get("points") == 0 and not entry.get("breakdown") \
+                and "projected_points" not in entry:
+            out.append(wk)
+    return out
 
 
 def recent_form(player: Any, lookback: int = 3) -> dict[str, Any]:
@@ -130,16 +146,7 @@ def _breakdown_for(player: Any, week: Optional[int]) -> dict[str, Any]:
     return {}
 
 
-def usage(player: Any, week: Optional[int] = None) -> dict[str, float]:
-    """Opportunity metrics (targets, carries, volume) from the stat breakdown.
-
-    Returns only the metrics ESPN actually reports for this player. Season-level
-    breakdown is used when a specific week isn't available, so values may be
-    season totals — the caller labels them accordingly.
-    """
-    bd = _breakdown_for(player, week)
-    if not bd:
-        return {}
+def _pick(bd: dict[str, Any]) -> dict[str, float]:
     out: dict[str, float] = {}
     for label, keys in _USAGE_KEYS.items():
         for k in keys:
@@ -148,6 +155,38 @@ def usage(player: Any, week: Optional[int] = None) -> dict[str, float]:
                 out[label] = float(v)
                 break
     return out
+
+
+def usage(player: Any, week: Optional[int] = None) -> dict[str, float]:
+    """Opportunity metrics (targets, carries, volume) from the stat breakdown.
+
+    Prefers the breakdown of the specific ``week``. Otherwise sums the played
+    weeks' breakdowns (ESPN's season bucket mixes totals and per-game averages,
+    so it is only a last resort) and adds ``games`` so callers can show
+    per-game rates. Returns only the metrics ESPN actually reports.
+    """
+    stats = getattr(player, "stats", None)
+    if week is not None and isinstance(stats, dict):
+        for key in (week, str(week)):
+            entry = stats.get(key)
+            if isinstance(entry, dict) and entry.get("breakdown") and isinstance(entry.get("points"), (int, float)):
+                return _pick(entry["breakdown"])
+    weekly: list[dict[str, Any]] = []
+    if isinstance(stats, dict):
+        for k, entry in stats.items():
+            if isinstance(k, int) and k > 0 and isinstance(entry, dict) \
+                    and entry.get("breakdown") and isinstance(entry.get("points"), (int, float)):
+                weekly.append(entry["breakdown"])
+    if weekly:
+        total: dict[str, float] = {}
+        for bd in weekly:
+            for label, v in _pick(bd).items():
+                total[label] = total.get(label, 0.0) + v
+        if total:
+            total["games"] = float(len(weekly))
+        return total
+    bd = _breakdown_for(player, None)
+    return _pick(bd) if bd else {}
 
 
 def market(player: Any) -> dict[str, Any]:

@@ -38,6 +38,9 @@ __all__ = [
     "fmt_ts",
     "league_position_averages",
     "eligible_slots",
+    "find_player",
+    "position_strength",
+    "season_year",
 ]
 
 
@@ -434,4 +437,101 @@ def eligible_slots(player: Any) -> set[str]:
     out = {pos}
     if pos in {"RB", "WR", "TE"}:
         out |= {"FLEX", "RB/WR/TE"}
+    return out
+
+
+def season_year(league: "League") -> int:
+    """The NFL season the league object represents."""
+    y = getattr(league, "year", None)
+    return int(y) if isinstance(y, int) else config.YEAR
+
+
+def _norm_player_name(name: Any) -> str:
+    n = str(name or "").lower().replace(".", "").replace("'", "").replace("-", " ")
+    return " ".join(w for w in n.split() if w not in ("jr", "sr", "ii", "iii", "iv"))
+
+
+def find_player(league: "League", query: str) -> tuple[Any, Any, list[str]]:
+    """Resolve a (possibly misspelled / partial) player name league-wide.
+
+    Returns ``(player, owning_team_or_None, suggestions)``. ``player`` is a
+    roster Player (full stats) when someone owns him, else the free-agent card
+    via ``league.player_info``; ``None`` when nothing matches, in which case
+    ``suggestions`` lists close names so the caller can ask.
+
+    Matching order: exact normalized name -> unique substring/token match on
+    rosters -> difflib close match on rosters -> the same on ESPN's full player
+    map (free agents).
+    """
+    import difflib
+
+    q = _norm_player_name(query)
+    if not q:
+        return None, None, []
+
+    rostered: list[tuple[str, Any, Any]] = []
+    for team in league.teams:
+        for pl in getattr(team, "roster", None) or []:
+            rostered.append((_norm_player_name(getattr(pl, "name", "")), pl, team))
+
+    for n, pl, team in rostered:
+        if n == q:
+            return pl, team, []
+    subs = [(n, pl, team) for n, pl, team in rostered
+            if q in n or all(tok in n.split() for tok in q.split())]
+    if len(subs) == 1:
+        return subs[0][1], subs[0][2], []
+    if len(subs) > 1:
+        return None, None, [getattr(pl, "name", "?") for _, pl, _ in subs[:8]]
+    names = [n for n, _, _ in rostered]
+    close = difflib.get_close_matches(q, names, n=3, cutoff=0.8)
+    if len(close) >= 1:
+        hit = next(r for r in rostered if r[0] == close[0])
+        if len(close) == 1 or difflib.SequenceMatcher(None, q, close[0]).ratio() > 0.9:
+            return hit[1], hit[2], []
+        return None, None, [next(getattr(pl, "name", "?") for n, pl, _ in rostered if n == c)
+                            for c in close]
+
+    # Free agents / anyone: ESPN's player map holds name -> id (and id -> name).
+    pmap = getattr(league, "player_map", None) or {}
+    by_norm: dict[str, str] = {}
+    for key in pmap:
+        if isinstance(key, str) and not key.isdigit():
+            by_norm.setdefault(_norm_player_name(key), key)
+    cands = [by_norm[n] for n in by_norm if q == n]
+    if not cands:
+        cands = [by_norm[n] for n in by_norm if q in n]
+    if not cands:
+        cands = [by_norm[n] for n in difflib.get_close_matches(q, list(by_norm), n=3, cutoff=0.8)]
+    if len(cands) == 1 or (cands and _norm_player_name(cands[0]) == q):
+        try:
+            pl = league.player_info(name=cands[0])
+        except Exception:  # noqa: BLE001
+            pl = None
+        if isinstance(pl, list):
+            pl = pl[0] if pl else None
+        if pl is not None:
+            return pl, None, []
+    return None, None, cands[:8]
+
+
+def position_strength(league: "League", team: Any, week: int) -> dict[str, dict[str, Any]]:
+    """Starter strength per position vs the league average at that position.
+
+    {pos: {per_starter, league_avg, pct, verdict}} where verdict is
+    STRONG / average / WEAK (+/-8%).
+    """
+    lg_avg = league_position_averages(league, week)
+    by_pos: dict[str, list[Any]] = {}
+    for p in getattr(team, "roster", None) or []:
+        if is_starter(p):
+            by_pos.setdefault(player_position(p), []).append(p)
+    out: dict[str, dict[str, Any]] = {}
+    for pos, players in by_pos.items():
+        per = sum(player_projected(p, week) for p in players) / len(players)
+        avg = lg_avg.get(pos, 0.0)
+        pct = ((per - avg) / avg * 100) if avg else 0.0
+        verdict = "STRONG" if pct > 8 else ("WEAK" if pct < -8 else "average")
+        out[pos] = {"per_starter": round(per, 1), "league_avg": round(avg, 1),
+                    "pct": round(pct), "verdict": verdict if avg else "n/a"}
     return out

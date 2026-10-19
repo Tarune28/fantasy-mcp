@@ -3,7 +3,17 @@
 A [Model Context Protocol](https://modelcontextprotocol.io) server that gives Claude
 Desktop full read access to your ESPN Fantasy Football league — standings, rosters,
 matchups, free agents, trades, and purpose-built tools for trade and roster-improvement
-analysis.
+analysis — plus the outside context a real analyst uses: Vegas lines and weather,
+snap / carry / target share, official NFL depth charts and injury reports, head
+coaches, offense rankings, schedules, and dated news.
+
+**Ask casually; it does the research.** "Should I trade Hubbard for Zay Flowers?"
+runs `evaluate_trade`, which pulls both rosters, both teams' needs, lineup impact,
+byes, and a full situational dossier on every player (is a teammate about to come
+back from IR? is he in a committee? how's the offense and the coach? playoff
+schedule?). The server's instructions tell Claude to call `get_fantasy_context`
+first for anything about *your* team, so you never have to spell out "consider my
+needs and week 6 too".
 
 Built on [`espn-api`](https://github.com/cwendt94/espn-api) and the
 [`mcp`](https://pypi.org/project/mcp/) Python SDK.
@@ -24,7 +34,12 @@ Built on [`espn-api`](https://github.com/cwendt94/espn-api) and the
 | `get_head_to_head` | Season history between two teams |
 | `get_free_agents` | Top available FAs by position |
 | `get_player_stats` | A player's season stats, weekly scores, status |
-| `analyze_player` | **Multi-factor** player review: form, floor/ceiling, usage, Vegas implied total, opponent defense, depth-chart role, injury, market — not just the projection |
+| `get_fantasy_context` | **Start here.** Date/week, your record & standing, scoring, roster with flags, position strength vs league, byes, injuries, pending claims, best free agents |
+| `analyze_player` | **Full dossier** on one player: form, floor/ceiling, snap/carry/target share by week, team record + offense rank + head coach, official depth-chart slot, every teammate in his positional room with injury status, health/practice, Vegas implied total + weather, rest-of-season & playoff schedule, market, dated news |
+| `evaluate_trade` | "Should I trade A for B?" in one call: both rosters, both teams' needs, roster legality, optimal lineup before/after, depth and byes after, dossiers on every player |
+| `compare_players` | "X or Y?" — summary table + dossiers for 2-5 players (start/sit, waiver pick, value) |
+| `get_player_news` | Dated Rotowire/ESPN blurbs, practice reports and ESPN's current story for a player |
+| `get_nfl_team_situation` | The real NFL team: coach, offense/defense rank, official depth chart with injuries, schedule |
 | `get_power_rankings` | Power rankings for a week |
 | `get_trade_activity` | Recent completed trades |
 | `get_recent_transactions` | Recent adds, drops, waiver claims, and trades |
@@ -71,7 +86,33 @@ the exact move and changes nothing. It submits to ESPN only when called again wi
 
 All team-name arguments accept **either the team name or the owner name**, matched
 case-insensitively as a substring. If nothing matches, the tool returns the list of
-valid teams so you can try again.
+valid teams so you can try again. Player names can be partial or misspelled
+("chuba hubard"); ambiguous names return suggestions.
+
+### Prompts (Claude Desktop "+" menu)
+
+`trade_check`, `weekly_briefing`, `start_or_sit`, `waiver_targets` — one-click
+entry points that run the right tools and frame the answer.
+
+### Where the outside data comes from
+
+All free, no-auth, cached, and non-fatal (a dead source blanks a section, never
+breaks a tool). Set `ESPN_MCP_EXTERNAL=0` to run ESPN-only.
+
+| Signal | Source |
+| --- | --- |
+| Vegas O/U, spread, implied team totals, kickoff, weather | ESPN scoreboard API |
+| Offense / defense rank, points for & against, record | ESPN standings API |
+| Head coach, full NFL roster with injury status / IR / practice squad | ESPN team roster API |
+| Official offensive depth chart | ESPN core depth-chart API |
+| NFL schedule + bye week | ESPN team schedule API |
+| Snap %, carries / targets and share of team, red-zone looks (weekly) | Sleeper stats API |
+| Depth order, injury notes, practice participation, add/drop trends | Sleeper players API |
+| Dated news blurbs, current story, season outlook | ESPN fantasy news + athlete overview APIs |
+
+The server instructions (`config.GUIDANCE`) also tell Claude to use web search,
+when it has it, for anything newer than the dated blurbs — beat reports, practice
+reports, coach quotes — before a consequential call.
 
 ---
 
@@ -84,10 +125,15 @@ espn_fantasy_mcp/
   app.py                       # the MCP server instance + main()
   client.py                    # ESPN League caching (get_league / reset_league)
   formatting.py                # version-tolerant helpers (projections, fuzzy match, weeks…)
+  signals.py                   # per-player stats math (form, volatility, usage) — no network
+  sources.py                   # external data: Vegas, team strength, NFL rosters/depth charts, Sleeper, news
+  prompts.py                   # MCP prompts (trade_check, weekly_briefing, …)
   tools/
     league.py                  # league-wide tools (overview, standings, matchups, settings…)
     teams.py                   # roster, head-to-head, schedule, comparison, analysis
     players.py                 # free agents, player stats, player NFL schedule
+    analysis.py                # analyze_player + the shared player dossier
+    research.py                # composite tools: get_fantasy_context, evaluate_trade, compare_players, news, NFL team
     advice.py                  # trade candidates + start/sit
     roster_moves.py            # WRITE tools: add/drop, waiver claim, set lineup
 ```
@@ -206,6 +252,53 @@ Ask Claude things like:
 The server ships with prompting guidance (in `server.py`) telling Claude to check
 scoring settings, bye weeks, and schedule strength before giving trade or start/sit
 advice.
+
+---
+
+## Autopilot — run your team on a daily schedule
+
+Beyond the interactive MCP tools, the repo can **manage your team unattended** via
+a daily job (`espn_fantasy_mcp/autopilot.py`, run through `run_daily.py`). Each run:
+
+1. **Sets your optimal lineup.** Solves the whole lineup as an assignment problem
+   (every player against every startable slot, respecting eligibility + FLEX,
+   maximizing projected points), then submits only the moves needed. Reversible,
+   so it runs fully automatically.
+2. **Makes free-agent upgrades** *(guarded)* — only when adding a free agent and
+   dropping your worst non-starter would actually raise the starting-lineup
+   projection by `AUTOPILOT_MIN_UPGRADE` points. It **never drops a player in your
+   optimal lineup** or one rostered in ≥ `AUTOPILOT_PROTECT_OWNED`% of leagues, and
+   makes at most one add/drop per run.
+3. **Waiver claims** are opt-in and left as a stub (`AUTOPILOT_WAIVER`), since FAAB
+   bidding is hard to automate well.
+
+**It is dry-run by default.** With `AUTOPILOT_LIVE` unset/`0`, runs only *log* what
+they would do — watch a few days in `logs/autopilot.log`, then set `AUTOPILOT_LIVE=1`
+to go live. If your ESPN cookies expire (they will) or anything crashes, you get a
+macOS notification (and an optional `AUTOPILOT_ALERT_CMD` hook for email/ntfy/etc.)
+instead of a team that quietly stops being managed.
+
+### Setup (macOS `launchd`)
+
+```bash
+# 1. Configure credentials + behavior (git-ignored):
+cp autopilot.example.env autopilot.env
+$EDITOR autopilot.env            # ESPN_LEAGUE_ID, ESPN_S2, ESPN_SWID, team, knobs
+
+# 2. Test a dry-run by hand (logs to the terminal):
+python3.11 run_daily.py --dry-run
+
+# 3. Install the schedule (edit the plist's paths/times/Python first if needed):
+cp scripts/com.tarun.espn-fantasy-daily.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.tarun.espn-fantasy-daily.plist
+launchctl start com.tarun.espn-fantasy-daily     # run once now to verify
+tail -f logs/autopilot.log
+```
+
+The plist runs every morning (waivers/injuries/lineup) and again late Sunday
+morning (final lineup lock before the 1pm ET slate). Times are in the machine's
+local zone — adjust them, and note `launchd` only fires while the Mac is awake.
+When you trust it, set `AUTOPILOT_LIVE=1` in `autopilot.env` and reload the job.
 
 ---
 

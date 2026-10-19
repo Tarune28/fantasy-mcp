@@ -108,8 +108,9 @@ def get_trade_candidates(team_name: Optional[str] = None) -> str:
         lines.append("")
 
     lines.append(
-        "Tip: a good offer also fills the OTHER team's need — check compare_teams "
-        "and get_team_analysis on the target team before proposing."
+        "Tip: a good offer also fills the OTHER team's need. Once you have a concrete "
+        "package, call evaluate_trade(give=..., receive=...) — it pulls both rosters, "
+        "both teams' needs, lineup impact and the full dossier on every player."
     )
     return "\n".join(lines).rstrip()
 

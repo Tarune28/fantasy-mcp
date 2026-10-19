@@ -24,6 +24,6 @@ except TypeError:  # older signatures without an instructions kwarg
 
 def main() -> None:
     """Register all tools and run the MCP server over stdio (Claude Desktop)."""
-    from . import tools  # noqa: F401  (importing registers every @mcp.tool())
+    from . import prompts, tools  # noqa: F401  (importing registers every @mcp.tool()/@mcp.prompt())
 
     mcp.run(transport="stdio")
