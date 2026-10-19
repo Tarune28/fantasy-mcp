@@ -55,8 +55,8 @@ def _name(p: Any) -> str:
 def _optimal_total(league: Any, players: list[Any], week: int) -> Optional[float]:
     """Best starting-lineup projection for a set of players (None if unavailable)."""
     try:
-        from ..autopilot import _starting_slots, optimal_total
-        slots = _starting_slots(league)
+        from ..lineup import optimal_total, starting_slots
+        slots = starting_slots(league)
         if not slots:
             return None
         return optimal_total([p for p in players if player_slot(p) != "IR"], slots, week)
