@@ -21,3 +21,7 @@ secrets.*
 .vscode/
 .idea/
 .DS_Store
+
+# Autopilot
+logs/
+autopilot.env
